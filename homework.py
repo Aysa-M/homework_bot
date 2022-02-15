@@ -1,7 +1,7 @@
-from distutils.log import error
+import json
 import logging
-import sys
 import os
+import sys
 import time
 from http import HTTPStatus
 
@@ -58,7 +58,7 @@ def send_message(bot, message):
     try:
         bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
         logging.info('Отправка сообщения в Telegram прошла удачно.')
-    except Exception:
+    except Exception as error:
         logging.error(f'Ошибка при отправке пользователю: {error}')
 
 
@@ -77,9 +77,18 @@ def get_api_answer(current_timestamp):
     except Exception as error:
         logging.error(f'Ошибка запроса к API адресу: {error}')
     if response_from_api.status_code != HTTPStatus.OK:
-        logging.error(f'Ошибка ответа от API адреса: {error}')
-        raise Exception(f'Ошибка ответа от API адреса: {error}')
-    response = response_from_api.json()
+        logging.error(
+            f'Ошибка ответа от API адреса: {response_from_api.status_code}'
+        )
+        raise Exception(
+            f'Ошибка ответа от API адреса: {response_from_api.status_code}'
+        )
+    try:
+        response = response_from_api.json()
+    except json.JSONDecodeError as error:
+        logging.error(
+            f'Ответ от API адреса не преобразован в json(): {error}.'
+        )
     return response
 
 
@@ -90,14 +99,11 @@ def check_response(response):
     ожиданиям, то функция должна вернуть список домашних работ
     (он может быть и пустым), доступный в ответе API по ключу 'homeworks'.
     """
-    data_type = type(response)
-    if data_type is dict:
-        homeworks_list = response.get('homeworks')
-    elif data_type is not dict:
-        logging.error(f'Тип данных ответа от API адреса не dict: {error}')
-        raise TypeError(f'Тип данных ответа от API адреса не dict: {error}')
+    if type(response) is not dict:
+        logging.error('Тип данных ответа от API адреса не dict.')
+        raise TypeError('Тип данных ответа от API адреса не dict.')
     try:
-        homeworks_list
+        homeworks_list = response['homeworks']
     except KeyError:
         logging.error('В ответе API отсутствует ожидаемый ключ "homeworks".')
     try:
@@ -120,20 +126,17 @@ def parse_status(homework):
                       'ожидаемый ключ "homework_name".')
         raise KeyError('В ответе API отсутствует '
                        'ожидаемый ключ "homework_name".')
-    else:
-        homework_name = homework.get('homework_name')
     if 'status' not in homework:
         logging.error('В ответе API отсутствует ожидаемый ключ "status".')
         raise KeyError('В ответе API отсутствует ожидаемый ключ "status".')
-    else:
-        homework_status = homework.get('status')
-    if homework_status in HOMEWORK_STATUSES.keys():
-        verdict = HOMEWORK_STATUSES[homework_status]
-    elif homework_status not in HOMEWORK_STATUSES.keys():
+    homework_name = homework.get('homework_name')
+    homework_status = homework.get('status')
+    if homework_status not in HOMEWORK_STATUSES.keys():
         logging.error('Обнаружен недокументированный статус домашней '
                       'работы в ответе API.')
         raise KeyError('Обнаружен недокументированный статус домашней работы '
                        'в ответе API.')
+    verdict = HOMEWORK_STATUSES[homework_status]
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
@@ -185,7 +188,7 @@ def main():
             logging.error(error_message)
             if error != initial_error:
                 send_message(bot, error_message)
-            response = get_api_answer(current_timestamp)
+            initial_error = error
             time.sleep(RETRY_TIME)
         else:
             response = get_api_answer(current_timestamp)
