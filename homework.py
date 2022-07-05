@@ -48,7 +48,7 @@ formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(name)s - '
 handler.setFormatter(formatter)
 
 
-def send_message(bot, message):
+def send_message(bot, message: str) -> None:
     """.
     Отправляет сообщение в Telegram чат, определяемый переменной окружения
     TELEGRAM_CHAT_ID. Принимает на вход два параметра: экземпляр класса Bot и
@@ -75,7 +75,7 @@ def get_api_answer(current_timestamp):
                                          headers=HEADERS,
                                          params=params)
     except Exception as error:
-        logging.error(f'Ошибка запроса к API адресу: {error}')
+        logger.error(f'Ошибка запроса к API адресу: {error}')
     if response_from_api.status_code != HTTPStatus.OK:
         logger.error(
             f'Ошибка ответа от API адреса: {response_from_api.status_code}'
